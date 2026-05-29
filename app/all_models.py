@@ -5,6 +5,7 @@ import folder_paths
 comfy_path = os.path.dirname(folder_paths.__file__)
 
 unique3d_path = f'{comfy_path}/custom_nodes/ComfyUI-Unique3D'
+unique3d_ckpt_path = f'{comfy_path}/models/unique3d/ckpt'
 
 sys.path.append(unique3d_path)
 
@@ -29,6 +30,6 @@ class MyModelZoo:
     def init_models(self):
         self._pipe_disney_controlnet_lineart_ipadapter_i2i = load_common_sd15_pipe(
             base_model=self.base_model, ip_adapter=True, plus_model=False,
-            controlnet=f"{unique3d_path}/ckpt/controlnet-tile", pipeline_class=StableDiffusionControlNetImg2ImgPipeline)
+            controlnet=f"{unique3d_ckpt_path}/controlnet-tile", pipeline_class=StableDiffusionControlNetImg2ImgPipeline)
 
 model_zoo = MyModelZoo()

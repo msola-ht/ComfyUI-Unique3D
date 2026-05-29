@@ -6,6 +6,7 @@ import torch
 comfy_path = os.path.dirname(folder_paths.__file__)
 
 unique3d_path = f'{comfy_path}/custom_nodes/ComfyUI-Unique3D'
+unique3d_ckpt_path = f'{comfy_path}/models/unique3d/ckpt'
 
 output_path = f'{comfy_path}/output/Unique3D/'
 
@@ -16,7 +17,8 @@ yaml_path = os.path.join(unique3d_path, 'app', 'custom_models', 'image2mvimage.y
 with open(yaml_path, 'r', encoding='utf-8') as file:
     content = file.read()
 
-content = content.replace('#YOUR_COMFYUI_PATH#', unique3d_path.replace(os.path.sep, '/'))
+content = content.replace('#YOUR_UNIQUE3D_CKPT_PATH#', unique3d_ckpt_path.replace(os.path.sep, '/'))
+content = content.replace('#YOUR_COMFYUI_PATH#/ckpt', unique3d_ckpt_path.replace(os.path.sep, '/'))
 
 with open(yaml_path, 'w', encoding='utf-8') as file:
     file.write(content)
@@ -67,7 +69,7 @@ class Unique3DLoadPipeline:
 
         pipe = load_common_sd15_pipe(
             base_model=base_model, ip_adapter=ip_adapter, plus_model=plus_model,
-            controlnet=f"{unique3d_path}/ckpt/controlnet-tile")
+            controlnet=f"{unique3d_ckpt_path}/controlnet-tile")
 
         return (pipe,)
 

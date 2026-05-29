@@ -26,12 +26,14 @@ class NormalsRenderer:
             image_size: Tuple[int,int],
             mvp = None,
             device=None,
+            enable_antialias=True,
             ):
         if mvp is None:
             self._mvp = proj @ mv #C,4,4
         else:
             self._mvp = mvp
         self._image_size = image_size
+        self._enable_antialias = enable_antialias
         self._glctx = glctx
         _warmup(self._glctx, device)
 
@@ -55,7 +57,8 @@ class NormalsRenderer:
         col,_ = dr.interpolate(vert_col, rast_out, faces) #C,H,W,3
         alpha = torch.clamp(rast_out[..., -1:], max=1) #C,H,W,1
         col = torch.concat((col,alpha),dim=-1) #C,H,W,4
-        col = dr.antialias(col, rast_out, vertices_clip, faces) #C,H,W,4
+        if self._enable_antialias:
+            col = dr.antialias(col, rast_out, vertices_clip, faces) #C,H,W,4
         return col #C,H,W,4
 
 

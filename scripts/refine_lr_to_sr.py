@@ -31,6 +31,7 @@ SR_cache = None
 import folder_paths
 comfy_path = os.path.dirname(folder_paths.__file__)
 unique3d_path = f'{comfy_path}/custom_nodes/ComfyUI-Unique3D'
+unique3d_ckpt_path = f'{comfy_path}/models/unique3d/ckpt'
 
 def run_sr_fast(source_pils, scale=4):
     from PIL import Image
@@ -42,7 +43,7 @@ def run_sr_fast(source_pils, scale=4):
     else:
         upsampler = RealESRGANer(
             scale=4,
-            onnx_path=f"{unique3d_path}/ckpt/realesrgan-x4.onnx",
+            onnx_path=f"{unique3d_ckpt_path}/realesrgan-x4.onnx",
             tile=0,
             tile_pad=10,
             pre_pad=0,

@@ -77,16 +77,17 @@ def load_image_encoder():
     return image_encoder
 
 
-def load_common_sd15_pipe(base_model=DEFAULT_BASE_MODEL, device="auto", controlnet=None, ip_adapter=False,
+def load_common_sd15_pipe(base_model=DEFAULT_BASE_MODEL, device=None, controlnet=None, ip_adapter=False,
                           plus_model=True, torch_dtype=torch.float16, model_cpu_offload_seq=None,
                           enable_sequential_cpu_offload=False, vae_slicing=False,
                           pipeline_class=StableDiffusionControlNetImg2ImgPipeline, **kwargs):
     model_kwargs = dict(
         torch_dtype=torch_dtype,
-        device_map=device,
         requires_safety_checker=False,
         safety_checker=None,
     )
+    if device is not None:
+        model_kwargs["device_map"] = device
     components = load_base_model_components(base_model=base_model, torch_dtype=torch_dtype)
     model_kwargs.update(components)
     model_kwargs.update(kwargs)

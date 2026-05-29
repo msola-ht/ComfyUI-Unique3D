@@ -19,7 +19,7 @@ def run_mesh_refine(vertices, faces, pils: List[Image.Image], steps=100, start_e
 
     assert len(pils) == 4
     mv,proj = make_star_cameras_orthographic(4, 1)          
-    renderer = NormalsRenderer(mv,proj,list(pils[0].size))
+    renderer = NormalsRenderer(mv,proj,list(pils[0].size), enable_antialias=False)
     # cameras = make_star_cameras_orthographic_py3d([0, 270, 180, 90], device="cuda", focal=1., dist=4.0)
     # renderer = Pytorch3DNormalsRenderer(cameras, list(pils[0].size), device="cuda")
 

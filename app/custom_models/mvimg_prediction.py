@@ -9,10 +9,12 @@ comfy_path = os.path.dirname(folder_paths.__file__)
 
 if 'ComfyUI-Unique3D' not in comfy_path:
     unique3d_path = os.path.join(comfy_path, 'custom_nodes', 'ComfyUI-Unique3D')
+    unique3d_ckpt_path = os.path.join(comfy_path, 'models', 'unique3d', 'ckpt')
 
     sys.path.append(unique3d_path)
 else:
     unique3d_path = comfy_path
+    unique3d_ckpt_path = os.path.join(os.path.dirname(os.path.dirname(unique3d_path)), 'models', 'unique3d', 'ckpt')
 
 from PIL import Image
 import numpy as np
@@ -23,7 +25,7 @@ from ...scripts.all_typing import *
 from ...scripts.utils import session, simple_preprocess
 
 training_config = f"{unique3d_path}/app/custom_models/image2mvimage.yaml"
-checkpoint_path = f"{unique3d_path}/ckpt/img2mvimg/unet_state_dict.pth"
+checkpoint_path = f"{unique3d_ckpt_path}/img2mvimg/unet_state_dict.pth"
 trainer, pipeline = load_pipeline(training_config, checkpoint_path)
 # pipeline.enable_model_cpu_offload()
 

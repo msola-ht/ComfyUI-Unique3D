@@ -1,4 +1,5 @@
 # modified from https://github.com/Profactor/continuous-remeshing
+import os
 import nvdiffrast.torch as dr
 import nvdiffrast.torch
 import torch
@@ -13,11 +14,36 @@ def _warmup(glctx, device=None):
     tri = tensor([[0, 1, 2]], dtype=torch.int32)
     dr.rasterize(glctx, pos, tri, resolution=[256, 256])
 
-glctx = dr.RasterizeGLContext(output_db=False, device="cuda")
+def _create_rasterize_context(device="cuda"):
+    backend = os.environ.get("UNIQUE3D_RASTERIZER_BACKEND", "cuda").strip().lower()
+    errors = []
+
+    def try_cuda():
+        return dr.RasterizeCudaContext(device=device)
+
+    def try_gl():
+        return dr.RasterizeGLContext(output_db=False, device=device)
+
+    if backend == "gl":
+        creators = [("gl", try_gl), ("cuda", try_cuda)]
+    else:
+        creators = [("cuda", try_cuda), ("gl", try_gl)]
+
+    for name, creator in creators:
+        try:
+            ctx = creator()
+            _warmup(ctx, device)
+            if name != backend:
+                print(f"Warning! UNIQUE3D rasterizer backend fallback to {name}.")
+            return ctx
+        except Exception as exc:
+            errors.append(f"{name}: {exc}")
+
+    raise RuntimeError("Failed to initialize nvdiffrast context. " + " | ".join(errors))
 
 class NormalsRenderer:
     
-    _glctx:dr.RasterizeGLContext = None
+    _glctx = None
     
     def __init__(
             self,
@@ -34,8 +60,7 @@ class NormalsRenderer:
             self._mvp = mvp
         self._image_size = image_size
         self._enable_antialias = enable_antialias
-        self._glctx = glctx
-        _warmup(self._glctx, device)
+        self._glctx = _create_rasterize_context(device or "cuda")
 
     def render(self,
             vertices: torch.Tensor, #V,3 float

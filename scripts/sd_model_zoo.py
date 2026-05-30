@@ -80,7 +80,8 @@ def load_image_encoder():
 def load_common_sd15_pipe(base_model=DEFAULT_BASE_MODEL, device=None, controlnet=None, ip_adapter=False,
                           plus_model=True, torch_dtype=torch.float16, model_cpu_offload_seq=None,
                           enable_sequential_cpu_offload=False, vae_slicing=False,
-                          pipeline_class=StableDiffusionControlNetImg2ImgPipeline, **kwargs):
+                          pipeline_class=StableDiffusionControlNetImg2ImgPipeline, runtime_mode=None,
+                          **kwargs):
     model_kwargs = dict(
         torch_dtype=torch_dtype,
         requires_safety_checker=False,
@@ -132,12 +133,18 @@ def load_common_sd15_pipe(base_model=DEFAULT_BASE_MODEL, device=None, controlnet
     else:
         pipe.model_cpu_offload_seq = model_cpu_offload_seq
 
-    if enable_sequential_cpu_offload:
+    if runtime_mode is None:
+        runtime_mode = "sequential_offload" if enable_sequential_cpu_offload else "gpu_resident"
+
+    if runtime_mode == "sequential_offload":
         pipe.enable_sequential_cpu_offload()
+    elif runtime_mode == "cpu_offload":
+        pipe.enable_model_cpu_offload()
     else:
         pipe = pipe.to("cuda")
-        pass
-        # pipe.enable_model_cpu_offload()
+
+    pipe._unique3d_runtime_mode = runtime_mode
+
     if vae_slicing:
         pipe.enable_vae_slicing()
 

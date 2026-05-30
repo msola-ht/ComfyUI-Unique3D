@@ -12,6 +12,7 @@ from pytorch3d.renderer import (
     FoVOrthographicCameras,
 )
 from pytorch3d.renderer import MeshRasterizer
+import os
 
 def get_camera(world_to_cam, fov_in_degrees=60, focal_length=1 / (2**0.5), cam_type='fov'):
     # pytorch3d expects transforms as row-vectors, so flip rotation: https://github.com/facebookresearch/pytorch3d/issues/1183
@@ -65,11 +66,37 @@ def _warmup(glctx, device=None):
     tri = tensor([[0, 1, 2]], dtype=torch.int32)
     dr.rasterize(glctx, pos, tri, resolution=[256, 256])
 
+def _create_rasterize_context(device="cuda"):
+    backend = os.environ.get("UNIQUE3D_RASTERIZER_BACKEND", "cuda").strip().lower()
+    errors = []
+
+    def try_cuda():
+        return dr.RasterizeCudaContext(device=device)
+
+    def try_gl():
+        return dr.RasterizeGLContext(output_db=False, device=device)
+
+    if backend == "gl":
+        creators = [("gl", try_gl), ("cuda", try_cuda)]
+    else:
+        creators = [("cuda", try_cuda), ("gl", try_gl)]
+
+    for name, creator in creators:
+        try:
+            ctx = creator()
+            _warmup(ctx, device)
+            if name != backend:
+                print(f"Warning! UNIQUE3D rasterizer backend fallback to {name}.")
+            return ctx
+        except Exception as exc:
+            errors.append(f"{name}: {exc}")
+
+    raise RuntimeError("Failed to initialize nvdiffrast context. " + " | ".join(errors))
+
 class Pix2FacesRenderer:
     def __init__(self, device="cuda"):
-        self._glctx = dr.RasterizeGLContext(output_db=False, device=device)
+        self._glctx = _create_rasterize_context(device)
         self.device = device
-        _warmup(self._glctx, device)
 
     def transform_vertices(self, meshes: Meshes, cameras: CamerasBase):
         vertices = cameras.transform_points_ndc(meshes.verts_padded())

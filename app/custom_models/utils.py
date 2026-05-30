@@ -1,3 +1,4 @@
+import gc
 import torch
 from typing import List
 from dataclasses import dataclass
@@ -73,3 +74,34 @@ def load_pipeline(config_path, ckpt_path, pipeline_filter=lambda x: True, weight
             trainer_out = trainer
     pipeline = pipeline.to(device)
     return trainer_out, pipeline
+
+def prepare_pipeline_for_inference(pipeline):
+    if pipeline is None:
+        return
+
+    runtime_mode = getattr(pipeline, "_unique3d_runtime_mode", "manual_offload")
+    if runtime_mode in ("gpu_resident", "manual_offload"):
+        try:
+            pipeline.to("cuda")
+        except Exception:
+            try:
+                pipeline.to("cpu")
+            except Exception:
+                pass
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            raise
+
+
+def release_pipeline_vram(pipeline):
+    if pipeline is None:
+        return
+
+    runtime_mode = getattr(pipeline, "_unique3d_runtime_mode", "manual_offload")
+    if runtime_mode in ("gpu_resident", "manual_offload"):
+        pipeline.to("cpu")
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()

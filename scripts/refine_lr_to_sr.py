@@ -1,5 +1,6 @@
 import torch
 import os
+import gc
 
 import numpy as np
 from hashlib import md5
@@ -33,11 +34,20 @@ comfy_path = os.path.dirname(folder_paths.__file__)
 unique3d_path = f'{comfy_path}/custom_nodes/ComfyUI-Unique3D'
 unique3d_ckpt_path = f'{comfy_path}/models/unique3d/ckpt'
 
-def run_sr_fast(source_pils, scale=4):
+def release_sr_cache():
+    global SR_cache
+    SR_cache = None
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+def run_sr_fast(source_pils, scale=4, keep_model_loaded=True):
     from PIL import Image
     from scripts.upsampler import RealESRGANer
     import numpy as np
     global SR_cache
+    cache_enabled = keep_model_loaded and scale == 4
     if SR_cache is not None:
         upsampler = SR_cache
     else:
@@ -60,6 +70,14 @@ def run_sr_fast(source_pils, scale=4):
             ret_pils.append(output)
         else:
             ret_pils.append(Image.fromarray(output))
-    if SR_cache is None:
-        SR_cache = upsampler
+    if cache_enabled:
+        if SR_cache is None:
+            SR_cache = upsampler
+    else:
+        if SR_cache is upsampler:
+            SR_cache = None
+        del upsampler
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
     return ret_pils

@@ -6,6 +6,7 @@ from scripts.refine_lr_to_sr import run_sr_fast
 from scripts.utils import simple_clean_mesh
 from ..app.utils import simple_remove, split_image
 from ..app.custom_models.normal_prediction import predict_normals
+from ..app.custom_models.utils import prepare_pipeline_for_inference, release_pipeline_vram
 from ..mesh_reconstruction.recon import reconstruct_stage1
 from ..mesh_reconstruction.refine import run_mesh_refine
 from scripts.project_mesh import get_cameras_list
@@ -64,29 +65,15 @@ import gc
 import torch
 
 
-def prepare_pipeline_for_inference(pipe, label):
-    if pipe is None:
-        return
-
-    runtime_mode = getattr(pipe, "_unique3d_runtime_mode", "gpu_resident")
-    if runtime_mode == "gpu_resident":
-        pipe.to("cuda")
-
-
-def release_pipeline_vram(pipe, label):
-    if pipe is None:
-        return
-
-    pipe.to("cpu")
-
-
 def geo_reconstruct(pipe, rgb_pils, normal_pils, front_pil, do_refine=False, predict_normal=True, expansion_weight=0.1, init_type="std"):
     if front_pil.size[0] <= 512:
         front_pil = run_sr_fast([front_pil])[0]
     if do_refine:
-        prepare_pipeline_for_inference(pipe, "refine pipe")
-        refined_rgbs = refine_rgb(rgb_pils, front_pil, pipe)  # 6s
-        release_pipeline_vram(pipe, "refine pipe")
+        prepare_pipeline_for_inference(pipe)
+        try:
+            refined_rgbs = refine_rgb(rgb_pils, front_pil, pipe)  # 6s
+        finally:
+            release_pipeline_vram(pipe)
     else:
         refined_rgbs = [rgb.resize((512, 512), resample=Image.LANCZOS) for rgb in rgb_pils]
     img_list = [front_pil] + run_sr_fast(refined_rgbs[1:])

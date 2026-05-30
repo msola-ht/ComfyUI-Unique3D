@@ -12,17 +12,6 @@ output_path = f'{comfy_path}/output/Unique3D/'
 
 os.makedirs(output_path, exist_ok=True)
 
-yaml_path = os.path.join(unique3d_path, 'app', 'custom_models', 'image2mvimage.yaml')
-
-with open(yaml_path, 'r', encoding='utf-8') as file:
-    content = file.read()
-
-content = content.replace('#YOUR_UNIQUE3D_CKPT_PATH#', unique3d_ckpt_path.replace(os.path.sep, '/'))
-content = content.replace('#YOUR_COMFYUI_PATH#/ckpt', unique3d_ckpt_path.replace(os.path.sep, '/'))
-
-with open(yaml_path, 'w', encoding='utf-8') as file:
-    file.write(content)
-
 sys.path.append(unique3d_path)
 
 python_executable_path = sys.executable
@@ -40,6 +29,28 @@ from PIL import Image
 from pytorch3d.structures import Meshes
 
 import numpy as np
+
+
+def cleanup_before_small_image_upscale():
+    import gc
+
+    try:
+        from comfy import model_management
+        model_management.unload_all_models()
+        model_management.cleanup_models_gc()
+        model_management.soft_empty_cache(True)
+    except Exception as exc:
+        print(f"Warning! failed to fully unload ComfyUI models before SR: {exc}")
+
+    try:
+        from .scripts.refine_lr_to_sr import release_sr_cache
+        release_sr_cache()
+    except Exception as exc:
+        print(f"Warning! failed to release SR cache before SR: {exc}")
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 class Unique3DLoadPipeline:
@@ -66,10 +77,12 @@ class Unique3DLoadPipeline:
         base_model = "runwayml/stable-diffusion-v1-5"
 
         from .scripts.sd_model_zoo import load_common_sd15_pipe
+        from .app.custom_models.utils import release_pipeline_vram
 
         pipe = load_common_sd15_pipe(
             base_model=base_model, ip_adapter=ip_adapter, plus_model=plus_model,
             controlnet=f"{unique3d_ckpt_path}/controlnet-tile")
+        release_pipeline_vram(pipe)
 
         return (pipe,)
 
@@ -84,25 +97,30 @@ class Unique3DRunMVPrediction:
             "required": {
                 "images": ("IMAGE",),
                 "input_processing": ([True, False],),
+                "small_image_upscale": (["off", "x2", "x4"], {"default": "x2"}),
+                "free_vram_before_upscale": ([True, False], {"default": True}),
             },
         }
 
-    RETURN_TYPES = ("PILS", "PIL",)
-    RETURN_NAMES = ("rgb_pils", "front_pil",)
+    RETURN_TYPES = ("PILS", "PIL", "IMAGE",)
+    RETURN_NAMES = ("rgb_pils", "front_pil", "upscaled_image",)
 
     FUNCTION = "run"
 
     CATEGORY = "Unique3D"
 
-    def run(self, images, input_processing):
+    def run(self, images, input_processing, small_image_upscale, free_vram_before_upscale):
         img_batch_np = images.cpu().detach().numpy().__mul__(255.).astype(np.uint8)
 
         preview_img = Image.fromarray(img_batch_np[0])
 
-        if preview_img.size[0] <= 512:
+        upscale_factor = {"off": 1, "x2": 2, "x4": 4}[small_image_upscale]
+        if max(preview_img.size) <= 512 and upscale_factor > 1:
+            if free_vram_before_upscale:
+                cleanup_before_small_image_upscale()
             from .scripts.refine_lr_to_sr import run_sr_fast
 
-            preview_img = run_sr_fast([preview_img])[0]
+            preview_img = run_sr_fast([preview_img], scale=upscale_factor, keep_model_loaded=False)[0]
 
         seed = -1
 
@@ -110,7 +128,12 @@ class Unique3DRunMVPrediction:
 
         rgb_pils, front_pil = run_mvprediction(preview_img, input_processing, int(seed))
 
-        return (rgb_pils, front_pil,)
+        upscaled_image = torch.from_numpy(np.asarray(preview_img).astype(np.float32) / 255.0)
+        if upscaled_image.ndim == 2:
+            upscaled_image = upscaled_image.unsqueeze(-1)
+        upscaled_image = upscaled_image.unsqueeze(0)
+
+        return (rgb_pils, front_pil, upscaled_image,)
 
 
 class Unique3DRunGeoReconstruct:

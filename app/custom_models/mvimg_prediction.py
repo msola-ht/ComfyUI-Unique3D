@@ -20,13 +20,17 @@ from PIL import Image
 import numpy as np
 from rembg import remove
 from ..utils import change_rgba_bg, rgba_to_rgb
-from ..custom_models.utils import load_pipeline
+from ..custom_models.utils import load_pipeline, prepare_pipeline_for_inference, release_pipeline_vram
+from omegaconf import OmegaConf
 from ...scripts.all_typing import *
 from ...scripts.utils import session, simple_preprocess
 
 training_config = f"{unique3d_path}/app/custom_models/image2mvimage.yaml"
 checkpoint_path = f"{unique3d_ckpt_path}/img2mvimg/unet_state_dict.pth"
-trainer, pipeline = load_pipeline(training_config, checkpoint_path)
+training_config_obj = OmegaConf.load(training_config)
+training_config_obj.pretrained_model_name_or_path = f"{unique3d_ckpt_path}/img2mvimg"
+trainer, pipeline = load_pipeline(training_config_obj, checkpoint_path)
+release_pipeline_vram(pipeline)
 # pipeline.enable_model_cpu_offload()
 
 def predict(img_list: List[Image.Image], guidance_scale=2., **kwargs):
@@ -34,14 +38,18 @@ def predict(img_list: List[Image.Image], guidance_scale=2., **kwargs):
         img_list = [img_list]
     img_list = [rgba_to_rgb(i) if i.mode == 'RGBA' else i for i in img_list]
     ret = []
-    for img in img_list:
-        images = trainer.pipeline_forward(
-            pipeline=pipeline,
-            image=img,
-            guidance_scale=guidance_scale, 
-            **kwargs
-        ).images
-        ret.extend(images)
+    prepare_pipeline_for_inference(pipeline)
+    try:
+        for img in img_list:
+            images = trainer.pipeline_forward(
+                pipeline=pipeline,
+                image=img,
+                guidance_scale=guidance_scale,
+                **kwargs
+            ).images
+            ret.extend(images)
+    finally:
+        release_pipeline_vram(pipeline)
     return ret
 
 

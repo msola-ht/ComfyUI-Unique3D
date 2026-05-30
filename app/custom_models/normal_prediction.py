@@ -5,7 +5,7 @@ import folder_paths
 
 from PIL import Image
 from ..utils import rgba_to_rgb, simple_remove
-from ..custom_models.utils import load_pipeline
+from ..custom_models.utils import load_pipeline, prepare_pipeline_for_inference, release_pipeline_vram
 from ...scripts.utils import rotate_normals_torch
 from ...scripts.all_typing import *
 
@@ -25,23 +25,26 @@ try:
     pipeline.enable_attention_slicing()
 except AttributeError:
     pass
+release_pipeline_vram(pipeline)
 # pipeline.enable_model_cpu_offload()
 
 def predict_normals(image: List[Image.Image], guidance_scale=2., do_rotate=True, num_inference_steps=30, **kwargs):
     img_list = image if isinstance(image, list) else [image]
     img_list = [rgba_to_rgb(i) if i.mode == 'RGBA' else i for i in img_list]
     images = []
-    for img in img_list:
-        pred_images = trainer.pipeline_forward(
-            pipeline=pipeline,
-            image=img,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale,
-            **kwargs
-        ).images
-        images.extend(pred_images)
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+    prepare_pipeline_for_inference(pipeline)
+    try:
+        for img in img_list:
+            pred_images = trainer.pipeline_forward(
+                pipeline=pipeline,
+                image=img,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                **kwargs
+            ).images
+            images.extend(pred_images)
+    finally:
+        release_pipeline_vram(pipeline)
     images = simple_remove(images)
     if do_rotate and len(images) > 1:
         images = rotate_normals_torch(images, return_types='pil')
